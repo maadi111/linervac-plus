@@ -1,0 +1,59 @@
+name: iOS Build & Test
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  build-ios:
+    name: Build iOS App with EAS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🚀 Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 🔨 Build iOS (Preview Profile)
+        run: |
+          eas build --platform ios --profile preview --non-interactive --no-wait
+          echo "✅ iOS build queued! Check https://expo.dev for progress."
+          
+      - name: 📊 Build Info
+        run: |
+          echo "Build triggered from: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          echo ""
+          echo "🔗 View build status:"
+          echo "https://expo.dev/accounts/${{ secrets.EXPO_USERNAME }}/projects/linervac-plus/builds"
+
+      - name: 💬 Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚀 iOS build started! Check the [Expo dashboard](https://expo.dev) for progress.'
+            })
+

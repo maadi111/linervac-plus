@@ -1,0 +1,95 @@
+{
+  "expo": {
+    "name": "LinerVac+",
+    "slug": "linervac-plus",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A4D8C"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.linervac.plus",
+      "buildNumber": "1",
+      "deploymentTarget": "13.4",
+      "infoPlist": {
+        "NSCameraUsageDescription": "LinerVac+ needs camera access to scan QR codes and view live camera feed.",
+        "NSMicrophoneUsageDescription": "LinerVac+ needs microphone access for camera functionality.",
+        "NSPhotoLibraryUsageDescription": "LinerVac+ needs photo library access to save images.",
+        "NSLocationWhenInUseUsageDescription": "LinerVac+ may use location for device management.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A4D8C"
+      },
+      "package": "com.linervac.plus",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [],
+      "config": {
+        "googleMaps": {
+          "apiKey": ""
+        }
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow LinerVac+ to access your camera for QR scanning and live view.",
+          "microphonePermission": "Allow LinerVac+ to access your microphone for camera functionality.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0A4D8C",
+          "sounds": [
+            "./assets/sounds/alert.wav"
+          ],
+          "mode": "production"
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9829ea99-922c-41a8-a4ec-73be4032de24"
+      }
+    },
+    "owner": "maadi01",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/",
+      "fallbackToCacheTimeout": 0
+    }
+  }
+}
