@@ -18,7 +18,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.linervac.plus",
       "buildNumber": "1",
-      "deploymentTarget": "13.4",
       "infoPlist": {
         "NSCameraUsageDescription": "LinerVac+ needs camera access to scan QR codes and view live camera feed.",
         "NSMicrophoneUsageDescription": "LinerVac+ needs microphone access for camera functionality.",
