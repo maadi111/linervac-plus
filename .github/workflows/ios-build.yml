@@ -31,10 +31,10 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: 🔨 Build iOS (Preview Profile)
+      - name: 🔨 Build iOS (Simulator - No Apple ID Required)
         run: |
-          eas build --platform ios --profile preview --non-interactive --no-wait
-          echo "✅ iOS build queued! Check https://expo.dev for progress."
+          eas build --platform ios --profile development --non-interactive --no-wait
+          echo "✅ iOS simulator build queued! Check https://expo.dev for progress."
           
       - name: 📊 Build Info
         run: |
