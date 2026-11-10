@@ -5,7 +5,8 @@ import { Platform } from "react-native"
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -65,6 +66,7 @@ export async function scheduleReedSwitchAlert(unitName: string) {
       priority: Notifications.AndroidNotificationPriority.HIGH,
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: 900, // 15 minutes
       repeats: true,
     },

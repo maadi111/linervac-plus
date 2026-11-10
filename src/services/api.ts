@@ -74,9 +74,9 @@ class ApiService {
       const url = endpoint.startsWith("http")
         ? endpoint
         : `${this.baseUrl}${endpoint}`
-      const headers: HeadersInit = {
+      const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        ...options.headers,
+        ...(options.headers as Record<string, string> | undefined),
       }
 
       if (this.token) {
@@ -120,7 +120,7 @@ class ApiService {
         // If response is OK but not JSON, return the text
         return {
           success: true,
-          data: responseText,
+          data: responseText as unknown as T,
         }
       }
 

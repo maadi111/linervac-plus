@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { Client, Message } from "paho-mqtt"
+import type { Unit } from "../types"
 import { MQTT_CONFIG, MQTT_TOPICS, MQTT_COMMANDS } from "../constants/mqtt"
 
 export type MqttCommand = "waterValve" | "camera" | "fan" | "reed" | "shutdown" | "resume"
@@ -114,7 +115,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
     try {
       const mqttClient = new Client(host, port, path, clientId)
 
-      mqttClient.onConnectionLost = (responseObject) => {
+      mqttClient.onConnectionLost = (responseObject: { errorMessage?: string }) => {
         console.log("MQTT Connection Lost:", responseObject.errorMessage)
         set({ isConnected: false, client: null, error: responseObject.errorMessage })
         
@@ -267,12 +268,12 @@ export const useMqttStore = create<MqttState>((set, get) => ({
           // Subscribe to all bound units (lazy import to avoid circular dependency)
           const { useUnitsStore } = require("./unitsStore")
           const units = useUnitsStore.getState().units
-          units.forEach((unit) => {
+          units.forEach((unit: Unit) => {
             get().subscribeToUnit(unit.uuid)
           })
 
           // Request initial status for all units
-          units.forEach((unit) => {
+          units.forEach((unit: Unit) => {
             // Request status after a short delay to ensure subscription is active
             setTimeout(() => {
               get().requestStatus(unit.uuid)
