@@ -127,7 +127,7 @@ export function QRScannerScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <View style={styles.iconContainer}>
-            <Ionicons name="camera-off" size={64} color={colors.danger} />
+            <Ionicons name="videocam-off" size={64} color={colors.danger} />
           </View>
           <Text style={styles.message}>Camera access is required to scan QR codes</Text>
           <Button title="Go Back" onPress={() => navigation.goBack()} variant="outline" style={styles.backButton} />

@@ -1,14 +1,21 @@
 // MQTT Configuration for LinerVac+
 
+// Broker settings come from EXPO_PUBLIC_* env vars (set in .env or EAS secrets/env),
+// with the current production broker as the default. Note: EXPO_PUBLIC_* values are
+// embedded in the app bundle, so they are NOT secret. Use them for a shared
+// app-level broker account restricted by ACLs (see mosquitto-acl.example), and plan
+// for per-user credentials/tokens before a wide release.
+const brokerUrl = process.env.EXPO_PUBLIC_MQTT_URL || "wss://mqtt.linervac.com/mqtt"
+
 export const MQTT_CONFIG = {
-  brokerUrl: "wss://mqtt.linervac.com/mqtt",
-  port: 443,
-  protocol: "wss" as const,
-  // Anonymous auth enabled for development
-  username: undefined,
-  password: undefined,
+  brokerUrl,
+  port: Number(process.env.EXPO_PUBLIC_MQTT_PORT) || 443,
+  useSSL: brokerUrl.startsWith("wss://"),
+  username: process.env.EXPO_PUBLIC_MQTT_USERNAME || undefined,
+  password: process.env.EXPO_PUBLIC_MQTT_PASSWORD || undefined,
   clientIdPrefix: "linervac_app_",
   reconnectPeriod: 5000,
+  maxReconnectPeriod: 60000,
   connectTimeout: 30000,
 }
 

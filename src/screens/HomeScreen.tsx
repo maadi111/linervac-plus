@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { useNavigation } from "@react-navigation/native"
@@ -13,6 +13,8 @@ import { useUnitsStore } from "../stores/unitsStore"
 import { useMqttStore } from "../stores/mqttStore"
 import type { RootStackParamList } from "../types"
 
+const SHUTDOWN_COUNTDOWN_SECONDS = 5
+
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, "Main">
 
 export function HomeScreen() {
@@ -21,7 +23,7 @@ export function HomeScreen() {
   const { connect, isConnected, sendCommand, requestStatus, requestAnalytics } = useMqttStore()
   const [shutdownModalVisible, setShutdownModalVisible] = useState(false)
   const [shutdownHoldTime, setShutdownHoldTime] = useState(0)
-  const [shutdownInterval, setShutdownInterval] = useState<NodeJS.Timeout | null>(null)
+  const shutdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const activeUnit = getActiveUnit()
   const status = getActiveUnitStatus()
@@ -45,11 +47,21 @@ export function HomeScreen() {
   //   return () => clearInterval(interval)
   // }, [isConnected, activeUnit, requestStatus, requestAnalytics])
 
-  // Optimized toggle handler
+  const notifyNotSent = useCallback(() => {
+    Alert.alert("Command not sent", "The unit could not be reached. Check your connection and try again.")
+  }, [])
+
+  // Send first, then reflect the change in the UI only if the broker accepted it.
+  // (Confirmed state still arrives via the MQTT state topics.)
   const handleControl = useCallback((control: "camera" | "reed" | "fan" | "waterValve", newValue: boolean) => {
     if (!activeUnit) return
 
-    // Update status immediately
+    const sent = sendCommand(activeUnit.uuid, control, newValue)
+    if (!sent) {
+      notifyNotSent()
+      return
+    }
+
     const statusUpdate = {
       camera: { cameraOn: newValue },
       reed: { reedSwitchClosed: newValue },
@@ -58,81 +70,80 @@ export function HomeScreen() {
     }[control]
 
     updateUnitStatus(activeUnit.id, statusUpdate)
-
-    // Send MQTT command
-    sendCommand(activeUnit.uuid, control, newValue)
-  }, [activeUnit, updateUnitStatus, sendCommand])
+  }, [activeUnit, updateUnitStatus, sendCommand, notifyNotSent])
 
   const handleResumeOperation = useCallback(() => {
     if (!activeUnit) return
-    sendCommand(activeUnit.uuid, "resume", true)
+    if (!sendCommand(activeUnit.uuid, "resume", true)) {
+      notifyNotSent()
+      return
+    }
     updateUnitStatus(activeUnit.id, {
       systemStatus: "NORMAL",
       powerLockout: false,
     })
-  }, [activeUnit, sendCommand, updateUnitStatus])
+  }, [activeUnit, sendCommand, updateUnitStatus, notifyNotSent])
 
-  const handleShutdownPress = useCallback(() => {
-    // Use setTimeout to defer state updates after render
-    setTimeout(() => {
-      setShutdownModalVisible(true)
-      setShutdownHoldTime(0)
-      
-      // Simulate 5-second hold
-      const interval = setInterval(() => {
-        setShutdownHoldTime((prev) => {
-          const newTime = prev + 0.1
-          if (newTime >= 5) {
-            clearInterval(interval)
-            setShutdownInterval(null)
-            handleShutdownConfirm()
-            return 5
-          }
-          return newTime
-        })
-      }, 100)
-
-      setShutdownInterval(interval)
-    }, 0)
+  const clearShutdownTimer = useCallback(() => {
+    if (shutdownTimerRef.current) {
+      clearInterval(shutdownTimerRef.current)
+      shutdownTimerRef.current = null
+    }
   }, [])
 
-  const handleShutdownConfirm = useCallback(() => {
+  // Never leave the countdown running after the screen unmounts.
+  useEffect(() => clearShutdownTimer, [clearShutdownTimer])
+
+  const performShutdown = useCallback(() => {
     if (!activeUnit) return
 
-    if (shutdownInterval) {
-      clearInterval(shutdownInterval)
-      setShutdownInterval(null)
+    // Node-RED holds GPIO 3 LOW for 5s on this command
+    if (!sendCommand(activeUnit.uuid, "shutdown", true)) {
+      notifyNotSent()
+      return
     }
-    
-    // Defer state updates
-    setTimeout(() => {
-      setShutdownModalVisible(false)
-      setShutdownHoldTime(0)
-      
-      // Turn off all controls and set shutdown status
-      updateUnitStatus(activeUnit.id, {
-        cameraOn: false,
-        waterValveOn: false,
-        fanOn: false,
-        systemStatus: "SHUTDOWN",
-      })
 
-      // Send shutdown command (Node-RED holds GPIO 3 LOW for 5s)
-      sendCommand(activeUnit.uuid, "shutdown", true)
-    }, 0)
-  }, [activeUnit, shutdownInterval, updateUnitStatus, sendCommand])
+    // Turn off all controls and set shutdown status
+    updateUnitStatus(activeUnit.id, {
+      cameraOn: false,
+      waterValveOn: false,
+      fanOn: false,
+      systemStatus: "SHUTDOWN",
+    })
+  }, [activeUnit, sendCommand, updateUnitStatus, notifyNotSent])
+
+  // The interval callback is created once, so always call the latest handler via a ref
+  // (avoids the stale-closure bug where an old activeUnit/sendCommand was used).
+  const performShutdownRef = useRef(performShutdown)
+  useEffect(() => {
+    performShutdownRef.current = performShutdown
+  }, [performShutdown])
+
+  // Cancellable countdown: shutdown is sent only if the user does not cancel in time.
+  const handleShutdownPress = useCallback(() => {
+    clearShutdownTimer()
+    setShutdownModalVisible(true)
+    setShutdownHoldTime(0)
+
+    const startedAt = Date.now()
+    shutdownTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000
+      if (elapsed >= SHUTDOWN_COUNTDOWN_SECONDS) {
+        clearShutdownTimer()
+        setShutdownHoldTime(SHUTDOWN_COUNTDOWN_SECONDS)
+        setShutdownModalVisible(false)
+        performShutdownRef.current()
+        return
+      }
+      setShutdownHoldTime(elapsed)
+    }, 100)
+  }, [clearShutdownTimer])
 
   const handleShutdownCancel = useCallback(() => {
-    if (shutdownInterval) {
-      clearInterval(shutdownInterval)
-      setShutdownInterval(null)
-    }
-    
-    setTimeout(() => {
-      setShutdownModalVisible(false)
-      setShutdownHoldTime(0)
-    }, 0)
-  }, [shutdownInterval])
+    clearShutdownTimer()
+    setShutdownModalVisible(false)
+    setShutdownHoldTime(0)
+  }, [clearShutdownTimer])
 
   const handleCameraPress = () => {
     if (activeUnit) {
@@ -313,7 +324,7 @@ export function HomeScreen() {
             disabled={!isConnected || !activeUnit}
           >
             <Ionicons name="power" size={24} color={colors.white} />
-            <Text style={styles.actionButtonText}>Shutdown (Hold 5s)</Text>
+            <Text style={styles.actionButtonText}>Shutdown (5s countdown)</Text>
           </TouchableOpacity>
         </View>
 
@@ -385,13 +396,13 @@ export function HomeScreen() {
             </View>
             <Text style={styles.modalTitle}>Shutdown System</Text>
             <Text style={styles.modalMessage}>
-              Hold for 5 seconds to confirm shutdown. This will power down all systems.
+              Shutdown starts automatically when the countdown ends and will power down all systems. Tap Cancel to abort.
             </Text>
             <View style={styles.progressBarContainer}>
               <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${(shutdownHoldTime / 5) * 100}%` }]} />
+                <View style={[styles.progressFill, { width: `${(shutdownHoldTime / SHUTDOWN_COUNTDOWN_SECONDS) * 100}%` }]} />
               </View>
-              <Text style={styles.progressText}>{Math.min(5, Math.ceil(shutdownHoldTime))}s</Text>
+              <Text style={styles.progressText}>{Math.min(SHUTDOWN_COUNTDOWN_SECONDS, Math.ceil(shutdownHoldTime))}s</Text>
             </View>
             <TouchableOpacity style={styles.cancelButton} onPress={handleShutdownCancel}>
               <Text style={styles.cancelButtonText}>Cancel</Text>

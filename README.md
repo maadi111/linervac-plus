@@ -10,7 +10,7 @@ A React Native/Expo mobile application for controlling the LinerVac+ pool vacuum
 - **Unit Info & Analytics** - UUID, data usage, power times, session/lifetime hours, firmware version
 - **Multiple Units Support** - Up to 5 units with tab switching
 - **Notifications** - Reed switch alerts with repeating 15-minute reminders
-- **MQTT Integration** - Secure WebSocket connection to broker
+- **MQTT Integration** - Secure WebSocket connection to an authenticated broker
 
 ## Prerequisites
 
@@ -41,14 +41,24 @@ A React Native/Expo mobile application for controlling the LinerVac+ pool vacuum
    - Press `a` for Android Emulator
    - Scan QR code with Expo Go app on physical device
 
-## MQTT Configuration
+## Configuration
 
-The app connects to the LinerVac+ MQTT broker:
+Copy `.env.example` to `.env` (git-ignored) and adjust. All values are optional.
 
-- **WebSocket URL**: `wss://mqtt.linervac.com/mqtt`
-- **Port**: 443
-- **TLS/SSL**: Enabled (Cloudflare protected)
-- **Authentication**: Anonymous (for development)
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `EXPO_PUBLIC_MQTT_URL` | Broker WebSocket URL | `wss://mqtt.linervac.com/mqtt` |
+| `EXPO_PUBLIC_MQTT_USERNAME` / `EXPO_PUBLIC_MQTT_PASSWORD` | Broker credentials | none |
+| `EXPO_PUBLIC_ALLOW_LOCAL_AUTH` | Dev builds only: allow a local session if the API login returns 404 | `false` |
+
+`EXPO_PUBLIC_*` values are bundled into the app and are **not secret**. Use a
+broker account restricted by ACLs (`mosquitto-acl.example`).
+
+### Broker
+
+`mosquitto-dual-protocol.conf` requires authentication (`allow_anonymous false`)
+and binds plain TCP to localhost. Create users with `mosquitto_passwd` and copy
+`mosquitto-acl.example` to `/etc/mosquitto/acl`.
 
 ### Test Topics
 
@@ -96,16 +106,12 @@ The app connects to the LinerVac+ MQTT broker:
 ### iOS
 
 \`\`\`bash
-npx expo build:ios
-# or with EAS Build
 eas build --platform ios
 \`\`\`
 
 ### Android
 
 \`\`\`bash
-npx expo build:android
-# or with EAS Build
 eas build --platform android
 \`\`\`
 
@@ -114,7 +120,7 @@ eas build --platform android
 - **Colors**: Pool industry aesthetic - blues (#0A4D8C), greys, light tans (#D4B896)
 - **Buttons**: Red when off, green when on
 - **Warnings**: High-visibility red/yellow pop-ups
-- **Controls**: Double-tap to prevent accidental activation
+- **Controls**: Double-tap to prevent accidental activation; shutdown uses a cancellable 5s countdown
 
 ## Support
 
