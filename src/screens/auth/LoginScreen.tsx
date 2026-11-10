@@ -39,12 +39,6 @@ export function LoginScreen() {
     }
   }
 
-  const handleQuickLogin = () => {
-    // Pre-fill with provided credentials for testing
-    setUsername("admin")
-    setPassword("LinerVac1")
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardView}>
@@ -108,12 +102,6 @@ export function LoginScreen() {
                 size="lg"
                 style={styles.loginButton}
               />
-
-              {/* Quick login for testing */}
-              <TouchableOpacity style={styles.quickLoginButton} onPress={handleQuickLogin}>
-                <Ionicons name="flash" size={16} color={colors.primary} />
-                <Text style={styles.quickLoginText}>Use Test Credentials</Text>
-              </TouchableOpacity>
             </View>
           </Card>
 
@@ -202,19 +190,6 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: spacing.sm,
     ...shadows.md,
-  },
-  quickLoginButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  quickLoginText: {
-    ...typography.bodySmall,
-    color: colors.primary,
-    fontWeight: "600",
   },
   footer: {
     flexDirection: "row",

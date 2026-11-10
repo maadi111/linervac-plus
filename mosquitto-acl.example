@@ -1,0 +1,19 @@
+# Example Mosquitto ACL for LinerVac+  ->  copy to /etc/mosquitto/acl
+# Pair with allow_anonymous false + password_file (see mosquitto-dual-protocol.conf).
+
+# Mobile app account: may send control commands and read device state.
+user linervac_app
+topic write linervac/camera/set
+topic write linervac/fan/set
+topic write linervac/valve/set
+topic write linervac/reed/sim
+topic write linervac/led/set
+topic write linervac/shutdown
+topic write linervac/resume
+topic read  linervac/#
+topic read  device/uuid
+
+# Device / Node-RED account: publishes state, reads commands.
+user linervac_device
+topic readwrite linervac/#
+topic write device/uuid

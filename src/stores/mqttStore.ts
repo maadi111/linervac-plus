@@ -2,6 +2,28 @@ import { create } from "zustand"
 import { Client, Message } from "paho-mqtt"
 import { MQTT_CONFIG, MQTT_TOPICS, MQTT_COMMANDS } from "../constants/mqtt"
 
+export type MqttCommand = "waterValve" | "camera" | "fan" | "reed" | "shutdown" | "resume"
+
+// Every topic the app listens to once connected.
+const SUBSCRIBED_TOPICS = [
+  MQTT_TOPICS.camera.set,
+  MQTT_TOPICS.camera.state,
+  MQTT_TOPICS.fan.set,
+  MQTT_TOPICS.fan.state,
+  MQTT_TOPICS.valve.set,
+  MQTT_TOPICS.valve.state,
+  MQTT_TOPICS.reed.state,
+  MQTT_TOPICS.reed.sim,
+  MQTT_TOPICS.led.set,
+  MQTT_TOPICS.shutdown,
+  MQTT_TOPICS.resume,
+  MQTT_TOPICS.system.status,
+  MQTT_TOPICS.system.network,
+  MQTT_TOPICS.data.usage,
+]
+
+let reconnectAttempts = 0
+
 interface MqttState {
   client: Client | null
   isConnected: boolean
@@ -15,7 +37,8 @@ interface MqttState {
   disconnect: () => void
   subscribeToUnit: (uuid: string) => void
   unsubscribeFromUnit: (uuid: string) => void
-  sendCommand: (uuid: string, command: "vacuum" | "waterValve" | "camera" | "fan" | "reed" | "shutdown" | "resume", value: boolean) => void
+  /** Returns true only if the message was actually handed to the broker. */
+  sendCommand: (uuid: string, command: MqttCommand, value: boolean) => boolean
   requestStatus: (uuid: string) => void
   requestAnalytics: (uuid: string) => void
   requestFirmware: (uuid: string) => void
@@ -95,14 +118,19 @@ export const useMqttStore = create<MqttState>((set, get) => ({
         console.log("MQTT Connection Lost:", responseObject.errorMessage)
         set({ isConnected: false, client: null, error: responseObject.errorMessage })
         
-        // Attempt to reconnect after a delay
+        // Reconnect with exponential backoff (5s, 10s, 20s ... capped)
+        const delay = Math.min(
+          MQTT_CONFIG.reconnectPeriod * 2 ** reconnectAttempts,
+          MQTT_CONFIG.maxReconnectPeriod,
+        )
+        reconnectAttempts += 1
         setTimeout(() => {
           const { isConnected } = get()
           if (!isConnected) {
             console.log("Attempting to reconnect to MQTT...")
             get().connect()
           }
-        }, MQTT_CONFIG.reconnectPeriod)
+        }, delay)
       }
 
       mqttClient.onMessageArrived = (message: Message) => {
@@ -127,7 +155,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
 
         // Helper to check if command was recently sent
         const checkPending = (cmd: string) => {
-          const timestamp = pendingCommands.get(cmd)
+          const timestamp = pendingCommands.get(`${activeUnit.uuid}/${cmd}`)
           return timestamp && (now - timestamp) < IGNORE_DURATION
         }
 
@@ -220,9 +248,12 @@ export const useMqttStore = create<MqttState>((set, get) => ({
         timeout: MQTT_CONFIG.connectTimeout / 1000, // Convert to seconds
         keepAliveInterval: 60,
         cleanSession: true,
-        useSSL: true,
+        useSSL: MQTT_CONFIG.useSSL,
+        ...(MQTT_CONFIG.username ? { userName: MQTT_CONFIG.username } : {}),
+        ...(MQTT_CONFIG.password ? { password: MQTT_CONFIG.password } : {}),
         onSuccess: () => {
           console.log("MQTT Connected successfully")
+          reconnectAttempts = 0
           set({ isConnected: true, isConnecting: false, client: mqttClient, error: null })
 
           // Subscribe to test topic
@@ -284,20 +315,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
     if (client && isConnected) {
       try {
         // Subscribe to all control and status topics (flat structure from Node-RED)
-        client.subscribe(MQTT_TOPICS.camera.set)
-        client.subscribe(MQTT_TOPICS.camera.state)
-        client.subscribe(MQTT_TOPICS.fan.set)
-        client.subscribe(MQTT_TOPICS.fan.state)
-        client.subscribe(MQTT_TOPICS.valve.set)
-        client.subscribe(MQTT_TOPICS.valve.state)
-        client.subscribe(MQTT_TOPICS.reed.state)
-        client.subscribe(MQTT_TOPICS.reed.sim)
-        client.subscribe(MQTT_TOPICS.led.set)
-        client.subscribe(MQTT_TOPICS.shutdown)
-        client.subscribe(MQTT_TOPICS.resume)
-        client.subscribe(MQTT_TOPICS.system.status)
-        client.subscribe(MQTT_TOPICS.system.network)
-        client.subscribe(MQTT_TOPICS.data.usage)
+        SUBSCRIBED_TOPICS.forEach((topic) => client.subscribe(topic))
         console.log(`Subscribed to all LinerVac topics`)
       } catch (error) {
         console.error(`Failed to subscribe to topics:`, error)
@@ -311,10 +329,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
     const { client, isConnected } = get()
     if (client && isConnected) {
       try {
-        client.unsubscribe(MQTT_TOPICS.camera.set)
-        client.unsubscribe(MQTT_TOPICS.fan.set)
-        client.unsubscribe(MQTT_TOPICS.valve.set)
-        client.unsubscribe(MQTT_TOPICS.reed.state)
+        SUBSCRIBED_TOPICS.forEach((topic) => client.unsubscribe(topic))
         console.log(`Unsubscribed from topics`)
       } catch (error) {
         console.error(`Failed to unsubscribe:`, error)
@@ -322,19 +337,19 @@ export const useMqttStore = create<MqttState>((set, get) => ({
     }
   },
 
-  sendCommand: (uuid: string, command: "vacuum" | "waterValve" | "camera" | "shutdown", value: boolean) => {
+  sendCommand: (uuid: string, command: MqttCommand, value: boolean): boolean => {
     const { client, isConnected } = get()
     
     if (!client) {
       console.warn("MQTT client not available, attempting to connect...")
       get().connect()
-      return
+      return false
     }
 
     if (!isConnected) {
       console.warn("MQTT not connected, attempting to connect...")
       get().connect()
-      return
+      return false
     }
 
     // Check if client is actually connected
@@ -343,13 +358,13 @@ export const useMqttStore = create<MqttState>((set, get) => ({
         console.warn("MQTT client reports not connected, attempting to reconnect...")
         set({ isConnected: false })
         get().connect()
-        return
+        return false
       }
     } catch (error) {
       console.warn("Error checking connection status:", error)
       set({ isConnected: false })
       get().connect()
-      return
+      return false
     }
 
     let topic: string
@@ -382,7 +397,7 @@ export const useMqttStore = create<MqttState>((set, get) => ({
         break
       default:
         console.error("Unknown command:", command)
-        return
+        return false
     }
 
     try {
@@ -405,11 +420,13 @@ export const useMqttStore = create<MqttState>((set, get) => ({
         cleaned.delete(commandKey)
         set({ pendingCommands: cleaned })
       }, 4000)
+      return true
     } catch (error) {
       console.error(`Failed to send command: ${topic}:`, error)
       // Try to reconnect on send failure
       set({ isConnected: false })
       get().connect()
+      return false
     }
   },
 

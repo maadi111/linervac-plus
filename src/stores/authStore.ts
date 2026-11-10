@@ -17,6 +17,10 @@ interface AuthState {
 
 const STORAGE_KEY = "@linervac_user"
 
+// Dev-only: allow a local session when the API login endpoint returns 404.
+// Always false in release builds, regardless of the env var.
+const ALLOW_LOCAL_AUTH = __DEV__ && process.env.EXPO_PUBLIC_ALLOW_LOCAL_AUTH === "true"
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -40,11 +44,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ isLoading: false, error: null })
         return true
       } else {
-        // If API login fails (e.g., 404), allow local login since MQTT is primary
-        // This allows the app to work even if API endpoints don't exist
-        if (response.error?.includes("404") || response.error?.includes("Server error: 404")) {
-          console.log("API endpoint not found, using local authentication")
-          // Create a local user for MQTT access
+        // Local (offline) login is a development-only escape hatch for when the
+        // API has no /auth/login endpoint yet. It is disabled in release builds
+        // and must be explicitly enabled with EXPO_PUBLIC_ALLOW_LOCAL_AUTH=true.
+        const apiMissing = response.error?.includes("404")
+        if (ALLOW_LOCAL_AUTH && apiMissing) {
+          console.warn("API login endpoint not found; using DEV-ONLY local authentication")
           const user: User = {
             id: `local_${Date.now()}`,
             name: username,
@@ -60,18 +65,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return false
       }
     } catch (error: any) {
-      // On network errors, allow local login for MQTT access
-      console.log("API login error, using local authentication:", error.message)
-      const user: User = {
-        id: `local_${Date.now()}`,
-        name: username,
-        email: `${username}@local`,
-        phone: "",
-        createdAt: new Date().toISOString(),
-      }
-      await get().setUser(user)
-      set({ isLoading: false, error: null })
-      return true
+      // Never grant access because of a network error.
+      console.error("API login error:", error?.message)
+      set({ isLoading: false, error: "Unable to reach the server. Check your connection and try again." })
+      return false
     }
   },
 
